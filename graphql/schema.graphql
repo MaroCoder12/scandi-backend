@@ -1,0 +1,50 @@
+type Product {
+    id: ID!
+    name: String!
+    price: Float!
+    category: Category
+    createdAt: String!
+}
+
+type attribute {
+    id: ID!
+    name: String!
+    value: String!
+}
+
+type Category {
+    id: ID!
+    name: String!
+}
+
+type User {
+  id: ID!
+  username: String!
+  email: String!
+  token: String
+}
+
+type AuthPayload {
+  user: User
+  message: String!
+}
+
+type Cart {
+    id: ID!
+    product: Product
+    quantity: Int
+}
+
+type Query {
+    product(id: ID!): Product
+    getProducts: [Product]
+    categories: [Category]
+    attributes: [attribute]
+    getCart: []
+}
+
+type Mutation {
+    createProduct(name: String!, price: Float!, categoryId: ID!): Product
+    login(username: String!, password: String!): AuthPayload
+    signup(username: String!, email: String!, password: String!): AuthPayload
+}
