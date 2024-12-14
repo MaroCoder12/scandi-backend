@@ -34,7 +34,20 @@ class Product extends AbstractProduct {
 
     public function getAllProducts() {
         $stmt = $this->db->query("SELECT * FROM products JOIN product_gallery ON products.id = product_gallery.product_id JOIN prices ON products.id = prices.product_id");
+<<<<<<< Updated upstream
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+=======
+        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return array_map(function ($item) {
+            return [
+                'id' => $item['product_id'],
+                'name' => $item['name'],
+                'amount' => $item['amount'],
+                'image_url' => $item['image_url'],
+                'category_id' => $item['category_id']
+            ];
+        }, $products);
+>>>>>>> Stashed changes
     }
 
     public function getProductById($id): mixed {
@@ -55,11 +68,24 @@ class Product extends AbstractProduct {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    public function getAttributes(): mixed {
-        $sql = "SELECT * FROM attributes JOIN attribute_items ON attributes.id = attribute_items.attribute_id";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute();
+    private function groupArrays($arrays) {
+        $result = [];
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($arrays as $array) {
+            // Append the value to the key's array
+            $result[$array['attribute_name']][] = $array['value'];
+        }
+
+        return $result;
+    }
+
+    public function getAttributes($id): mixed {
+        $sql = "SELECT * FROM attributes JOIN attribute_items ON attributes.id = attribute_items.attribute_id WHERE attributes.product_id = :id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->bindParam(':id', $id, PDO::PARAM_STR);
+        $stmt->execute();
+        $attributes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return $this->groupArrays($attributes);
     }
 }

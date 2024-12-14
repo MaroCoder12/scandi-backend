@@ -58,12 +58,6 @@ try {
         case 'attributes':
             $response = $resolver->getAttributes($variables);
             break;
-        case 'login':
-            $response = $resolver->login($variables);
-            break;
-        case 'signup':
-            $response = $resolver->signup($variables);
-            break;
         case 'AddToCart':
             $response = $resolver->addToCart($variables);
             break;

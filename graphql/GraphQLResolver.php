@@ -43,83 +43,9 @@ class GraphQLResolver {
         return $product->delete($variables['id']);
     }
 
-    public function getAttributes() : mixed{
+    public function getAttributes($variables) : mixed{
         $product = new Product($this->pdo);
-        return $product->getAttributes();
-    }
-
-    public function signup($variables) {
-        $username = $variables['username'];
-        $email = $variables['email'];
-        $password = $variables['password'];
-
-        if (empty($username) || empty($email) || empty($password)) {
-            return ['message' => 'All fields are required.'];
-        }
-
-        // Check if the user already exists
-        $stmt = $this->pdo->prepare("SELECT * FROM users WHERE name = :username OR email = :email");
-        $stmt->bindParam(':username', $username);
-        $stmt->bindParam(':email', $email);
-        $stmt->execute();
-        $existingUser = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($existingUser) {
-            return ['message' => 'Username or email already exists.'];
-        }
-
-        // Hash the password
-        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-
-        // Insert the new user
-        $stmt = $this->pdo->prepare("INSERT INTO users (name, email, password) VALUES (:username, :email, :password)");
-        $stmt->bindParam(':username', $username);
-        $stmt->bindParam(':email', $email);
-        $stmt->bindParam(':password', $hashedPassword);
-        $stmt->execute();
-
-        return [
-            'message' => 'User registered successfully.',
-            'user' => [
-                'id' => $this->pdo->lastInsertId(),
-                'username' => $username,
-                'email' => $email,
-                'token' => null // You can implement JWT or token generation here
-            ]
-        ];
-    }
-
-    // Login Resolver
-    public function login($variables) {
-        $username = $variables['username'];
-        $password = $variables['password'];
-
-        if (empty($username) || empty($password)) {
-            return ['message' => 'Username and password are required.'];
-        }
-
-        // Check if the user exists
-        $stmt = $this->pdo->prepare("SELECT * FROM users WHERE name = :username");
-        $stmt->bindParam(':username', $username);
-        $stmt->execute();
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$user || !password_verify($password, $user['password'])) {
-            return ['message' => 'Invalid username or password.'];
-        }
-
-        // Generate a token (optional: implement JWT)
-        $token = base64_encode(random_bytes(32));
-
-        return [
-            'message' => 'Login successful.',
-            'user' => [
-                'id' => $user['id'],
-                'username' => $user['name'],
-                'email' => $user['email'],
-                'token' => $token
-            ]
-        ];
+        return $product->getAttributes($variables['id']);
     }
 
     // Add to Cart Resolver
@@ -151,7 +77,7 @@ class GraphQLResolver {
         return [
             'id' => $this->pdo->lastInsertId(),
             'product' => $product,
-            'quantity' => $quantity
+            'quantity' => $quantity,
         ];
     }
 
