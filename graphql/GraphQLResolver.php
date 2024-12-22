@@ -50,9 +50,10 @@ class GraphQLResolver {
 
     // Add to Cart Resolver
     public function addToCart($variables) {
+        $cart = new Cart($this->pdo);
         $productId = $variables['productId'];
         $quantity = $variables['quantity'];
-
+        
         // Check if product exists
         $stmt = $this->pdo->prepare("SELECT * FROM products WHERE id = :id");
         $stmt->bindParam(':id', $productId);
@@ -64,11 +65,7 @@ class GraphQLResolver {
         }
 
         // Add product to cart (or update quantity if already in cart)
-        $stmt = $this->pdo->prepare("
-            INSERT INTO cart (product_id, quantity) 
-            VALUES (:productId, :quantity)
-            ON DUPLICATE KEY UPDATE quantity = quantity + :quantity
-        ");
+        $stmt = $this->pdo->prepare(" INSERT INTO cart (product_id, quantity) VALUES (:productId, :quantity) ON DUPLICATE KEY UPDATE quantity = quantity + :quantity ");
         $stmt->bindParam(':productId', $productId);
         $stmt->bindParam(':quantity', $quantity);
         $stmt->execute();
@@ -84,21 +81,32 @@ class GraphQLResolver {
     // Get Cart Resolver
     public function getCart() {
         $stmt = $this->pdo->query("
-            SELECT cart.id as cart_id, products.*, cart.quantity 
-            FROM cart 
-            JOIN products ON cart.product_id = products.product_id
+            SELECT cart.id as cart_id, products.*, cart.quantity, prices.amount, product_gallery.image_url  
+            FROM cart JOIN products ON cart.product_id = products.id 
+            JOIN prices ON cart.product_id = prices.product_id 
+            JOIN product_gallery ON cart.product_id = product_gallery.product_id 
         ");
         $cartItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+    
         return array_map(function ($item) {
             return [
                 'id' => $item['cart_id'],
                 'product' => [
-                    'id' => $item['product_id'],
+                    'id' => $item['id'],
                     'name' => $item['name'],
+                    'price' => $item['amount'],
+                    'image' => $item['image_url'],
                 ],
                 'quantity' => $item['quantity']
             ];
         }, $cartItems);
+    }
+
+    public function updateCartItem($variables) {
+        $cart = new Cart($this->pdo);
+        $productId = $variables['productId'];
+        $quantity = $variables['quantity'];
+
+        $cart->updateCartItem($productId, $quantity);
     }
 }

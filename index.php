@@ -61,6 +61,9 @@ try {
         case 'AddToCart':
             $response = $resolver->addToCart($variables);
             break;
+        case 'updateCart':
+            $response = $resolver->updateCartItem($variables);
+            break;
         case 'getCart':
             $response = $resolver->getCart();
             break;

@@ -34,9 +34,6 @@ class Product extends AbstractProduct {
 
     public function getAllProducts() {
         $stmt = $this->db->query("SELECT * FROM products JOIN product_gallery ON products.id = product_gallery.product_id JOIN prices ON products.id = prices.product_id");
-<<<<<<< Updated upstream
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-=======
         $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         return array_map(function ($item) {
             return [
@@ -47,7 +44,6 @@ class Product extends AbstractProduct {
                 'category_id' => $item['category_id']
             ];
         }, $products);
->>>>>>> Stashed changes
     }
 
     public function getProductById($id): mixed {
