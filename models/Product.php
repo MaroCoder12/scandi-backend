@@ -68,15 +68,15 @@ class Product extends AbstractProduct {
         $result = [];
 
         foreach ($arrays as $array) {
-            // Append the value to the key's array
-            $result[$array['attribute_name']][] = $array['value'];
+            // Append the value to the key's array using the correct field name
+            $result[$array['name']][] = $array['value'];
         }
 
         return $result;
     }
 
     public function getAttributes($id): mixed {
-        $sql = "SELECT * FROM attributes JOIN attribute_items ON attributes.id = attribute_items.attribute_id WHERE attributes.product_id = :id";
+        $sql = "SELECT attributes.name, attribute_items.value FROM attributes JOIN attribute_items ON attributes.id = attribute_items.attribute_id WHERE attributes.product_id = :id";
         $stmt = $this->db->prepare($sql);
         $stmt->bindParam(':id', $id, PDO::PARAM_STR);
         $stmt->execute();

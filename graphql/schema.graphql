@@ -1,7 +1,11 @@
 type Product {
     id: ID!
     name: String!
-    price: Float!
+    brand: String
+    description: String
+    inStock: Boolean
+    amount: Float
+    image_url: String
     category: Category
     createdAt: String!
 }
@@ -37,14 +41,23 @@ type Cart {
 
 type Query {
     product(id: ID!): Product
-    getProducts: [Product]
+    products: [Product]
     categories: [Category]
     attributes: [attribute]
-    getCart: []
+    cart: [Cart]
 }
 
 type Mutation {
     createProduct(name: String!, price: Float!, categoryId: ID!): Product
     login(username: String!, password: String!): AuthPayload
     signup(username: String!, email: String!, password: String!): AuthPayload
+    addToCart(productId: ID!, quantity: Int!): Cart
+    updateCart(itemId: ID!, quantityChange: Int!): Cart
+    removeFromCart(itemId: ID!): Cart
+    placeOrder: OrderResult
+}
+
+type OrderResult {
+    success: Boolean!
+    message: String!
 }

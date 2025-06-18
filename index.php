@@ -8,6 +8,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0); // Exit early for preflight requests
 }
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/graphql/GraphQLResolver.php';
 
@@ -32,6 +36,51 @@ if (is_null($input) || !isset($input['query'])) {
 $queryType = $input['query'];
 $operation = $input['operationName'] ?? '';
 $variables = $input['variables'] ?? [];
+
+// Debug: Log the incoming request for troubleshooting
+// error_log("Query: " . $queryType);
+// error_log("Operation: " . $operation);
+// error_log("Variables: " . json_encode($variables));
+
+// Parse GraphQL query to extract operation name and variables if not provided
+if (empty($operation)) {
+    if (strpos($queryType, 'mutation') !== false) {
+        if (strpos($queryType, 'removeFromCart') !== false) {
+            $operation = 'removeFromCart';
+            // Extract itemId from query if not in variables
+            if (empty($variables['itemId']) && preg_match('/removeFromCart\s*\(\s*itemId:\s*"([^"]+)"/', $queryType, $matches)) {
+                $variables['itemId'] = $matches[1];
+            }
+        } elseif (strpos($queryType, 'updateCart') !== false) {
+            $operation = 'updateCart';
+            // Extract variables from query if not in variables
+            if (empty($variables['itemId']) && preg_match('/updateCart\s*\(\s*itemId:\s*"([^"]+)"/', $queryType, $matches)) {
+                $variables['itemId'] = $matches[1];
+            }
+            if (empty($variables['quantityChange']) && preg_match('/quantityChange:\s*(-?\d+)/', $queryType, $matches)) {
+                $variables['quantityChange'] = (int)$matches[1];
+            }
+        } elseif (strpos($queryType, 'addToCart') !== false) {
+            $operation = 'AddToCart';
+            // Extract variables from query if not in variables
+            if (empty($variables['productId']) && preg_match('/addToCart\s*\(\s*productId:\s*"([^"]+)"/', $queryType, $matches)) {
+                $variables['productId'] = $matches[1];
+            }
+            if (empty($variables['quantity']) && preg_match('/quantity:\s*(\d+)/', $queryType, $matches)) {
+                $variables['quantity'] = (int)$matches[1];
+            }
+        } elseif (strpos($queryType, 'placeOrder') !== false) {
+            $operation = 'placeOrder';
+        }
+    } elseif (strpos($queryType, 'cart') !== false) {
+        $operation = 'cart';
+    }
+}
+
+// Debug: Final parsed values
+// error_log("Final operation: " . $operation);
+// error_log("Final variables: " . json_encode($variables));
+// error_log("Query type: " . $queryType);
 
 // Instantiate the resolver
 $resolver = new GraphQLResolver();
@@ -63,9 +112,18 @@ try {
             break;
         case 'updateCart':
             $response = $resolver->updateCartItem($variables);
+            if (!$response) {
+                $response = ['error' => 'Update failed'];
+            }
             break;
-        case 'getCart':
+        case 'cart':
             $response = $resolver->getCart();
+            break;
+        case 'removeFromCart':
+            $response = $resolver->removeFromCart($variables);
+            break;
+        case 'placeOrder':
+            $response = $resolver->placeOrder();
             break;
         default:
             $response = ['error' => 'Unknown operation'];
@@ -73,9 +131,41 @@ try {
     }
 
     // Wrap response in GraphQL-compliant structure
-    $output = [
-        'data' => $response,
-    ];
+    if ($operation === 'cart') {
+        $output = [
+            'data' => [
+                'cart' => $response
+            ],
+        ];
+    } elseif ($operation === 'AddToCart') {
+        $output = [
+            'data' => [
+                'addToCart' => $response
+            ],
+        ];
+    } elseif ($operation === 'updateCart') {
+        $output = [
+            'data' => [
+                'updateCart' => $response
+            ],
+        ];
+    } elseif ($operation === 'removeFromCart') {
+        $output = [
+            'data' => [
+                'removeFromCart' => $response
+            ],
+        ];
+    } elseif ($operation === 'placeOrder') {
+        $output = [
+            'data' => [
+                'placeOrder' => $response
+            ],
+        ];
+    } else {
+        $output = [
+            'data' => $response,
+        ];
+    }
 
 } catch (Exception $e) {
     // Return error message in GraphQL-compliant format
@@ -85,6 +175,13 @@ try {
         ]
     ];
 }
+
+// Debug: Add debug info to output (uncomment for troubleshooting)
+// $output['debug'] = [
+//     'operation' => $operation,
+//     'variables' => $variables,
+//     'query' => $queryType
+// ];
 
 // Return the response as JSON
 header('Content-Type: application/json');
