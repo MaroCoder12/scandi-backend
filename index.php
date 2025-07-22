@@ -1,13 +1,5 @@
 <?php
 
-// Enable CORS
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0); // Exit early for preflight requests
-}
-
 // Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -20,6 +12,15 @@ use Dotenv\Dotenv;
 // Load environment variables
 $dotenv = Dotenv::createImmutable(__DIR__);
 $dotenv->load();
+
+// Configure CORS
+$allowedOrigin = $_ENV['ALLOWED_ORIGIN'] ?? '*';
+header("Access-Control-Allow-Origin: " . $allowedOrigin);
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    exit(0); // Exit early for preflight requests
+}
 
 // Read and decode the incoming request
 $input = json_decode(file_get_contents('php://input'), true);
