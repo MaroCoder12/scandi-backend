@@ -1,33 +1,46 @@
 <?php
 
 require_once __DIR__ . '/../models/Product.php';
+require_once __DIR__ . '/../models/ProductFactory.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../models/Cart.php';
 
 class GraphQLResolver {
     private $pdo;
+    private $productFactory;
 
     public function __construct() {
         // Initialize the PDO connection
         $database = new Database();
         $this->pdo = $database->getConnection();
+        $this->productFactory = new ProductFactory($this->pdo);
     }
-    // Method to retrieve a single product by ID
+    // Method to retrieve a single product by ID using polymorphism
     public function getProduct($variables) {
-        $product = new Product($this->pdo);
-        return $product->getProductById($variables['id']);
+        return $this->productFactory->getProductByIdWithType($variables['id']);
     }
 
-    // Method to retrieve all products
+    // Method to retrieve all products using polymorphism
     public function getProducts() {
-        $product = new Product($this->pdo);
-        return $product->getAllProducts();
+        $products = $this->productFactory->getAllProductsWithTypes();
+        return array_map(function ($item) {
+            return [
+                'id' => $item['id'],
+                'name' => $item['name'],
+                'amount' => $item['amount'],
+                'image_url' => $item['image_url'],
+                'category_id' => $item['category_id'],
+                'brand' => $item['brand'] ?? '',
+                'product_type' => $item['product_type'] ?? 'general'
+            ];
+        }, $products);
     }
 
-    // Method to create a new product
+    // Method to create a new product using polymorphism
     public function createProduct($variables) {
-        $product = new Product($this->pdo);
-        $product->create($variables['name'], $variables['price'], $variables['category_id']);
+        $categoryId = $variables['category_id'];
+        $product = $this->productFactory->createProduct($categoryId);
+        $product->create($variables['name'], $variables['brand'], $categoryId);
     }
 
     // Method to update an existing product
@@ -109,7 +122,7 @@ class GraphQLResolver {
                 'name' => $product['name'],
                 'price' => $productDetails['amount'] ?? 0,  // Use 'price' to match cart query
                 'image' => $productDetails['image_url'] ?? '',  // Use 'image' to match cart query
-                'attributes' => $product['attributes'] ?? null,
+                'attributes' => json_encode([]), // Default empty attributes for quick shop
             ],
             'quantity' => $finalQuantity,
         ];

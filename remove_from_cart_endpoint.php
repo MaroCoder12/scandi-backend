@@ -9,8 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-require_once 'config/database.php';
-require_once 'graphql/GraphQLResolver.php';
+require_once 'services/CartService.php';
 
 try {
     // Only accept POST requests
@@ -22,26 +21,16 @@ try {
     $rawInput = file_get_contents('php://input');
     $input = json_decode($rawInput, true);
 
-    // Log the input for debugging
-    error_log("Remove from cart endpoint called with: " . $rawInput);
-
     // Check if this is a GraphQL request for removeFromCart
     if (!$input || !isset($input['variables']) || !isset($input['variables']['itemId'])) {
         throw new Exception('Invalid request format - itemId required');
     }
 
     $itemId = $input['variables']['itemId'];
-    error_log("Attempting to remove item ID: " . $itemId);
 
-    // Create resolver and remove item
-    $resolver = new GraphQLResolver();
-    error_log("Resolver created successfully");
-
-    $result = $resolver->removeFromCart(['itemId' => $itemId]);
-    error_log("Remove method called successfully");
-
-    // Log the result
-    error_log("Remove from cart result: " . json_encode($result));
+    // Create cart service and remove item
+    $cartService = new CartService();
+    $result = $cartService->removeFromCart($itemId);
 
     // Return GraphQL-compliant response
     $output = [
@@ -53,7 +42,7 @@ try {
     echo json_encode($output);
 
 } catch (Exception $e) {
-    error_log("Remove from cart error: " . $e->getMessage());
+    error_log("Remove from cart error: {$e->getMessage()}");
 
     $output = [
         'errors' => [
@@ -63,4 +52,3 @@ try {
 
     echo json_encode($output);
 }
-?>

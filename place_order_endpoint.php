@@ -9,8 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-require_once 'config/database.php';
-require_once 'graphql/GraphQLResolver.php';
+require_once 'services/OrderService.php';
 
 try {
     // Only accept POST requests
@@ -21,47 +20,40 @@ try {
     // Get the raw input
     $rawInput = file_get_contents('php://input');
     $input = json_decode($rawInput, true);
-    
-    // Log the input for debugging
-    error_log("Place order endpoint called with: " . $rawInput);
-    
+
     // Check if this is a GraphQL request for placeOrder
     if (!$input || !isset($input['query'])) {
         throw new Exception('Invalid request format');
     }
-    
+
     $query = $input['query'];
-    
+
     // Check if this is a place order mutation
     if (strpos($query, 'placeOrder') === false) {
         throw new Exception('This endpoint only handles placeOrder mutations');
     }
-    
-    // Create resolver and place order
-    $resolver = new GraphQLResolver();
-    $result = $resolver->placeOrder();
-    
-    // Log the result
-    error_log("Place order result: " . json_encode($result));
-    
+
+    // Create order service and place order
+    $orderService = new OrderService();
+    $result = $orderService->placeOrder();
+
     // Return GraphQL-compliant response
     $output = [
         'data' => [
             'placeOrder' => $result
         ]
     ];
-    
+
     echo json_encode($output);
-    
+
 } catch (Exception $e) {
-    error_log("Place order error: " . $e->getMessage());
-    
+    error_log("Place order error: {$e->getMessage()}");
+
     $output = [
         'errors' => [
             ['message' => $e->getMessage()]
         ]
     ];
-    
+
     echo json_encode($output);
 }
-?>
