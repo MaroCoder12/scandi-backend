@@ -35,6 +35,13 @@ class GraphQL {
                     'attributes' => [
                         'type' => Type::string(),
                         'resolve' => static function ($product) use ($resolver) {
+                            // If cart provided selected attributes, pass them through
+                            if (isset($product['attributes'])) {
+                                return is_string($product['attributes'])
+                                    ? $product['attributes']
+                                    : json_encode($product['attributes']);
+                            }
+                            // Otherwise, return available attributes for the product
                             $productId = $product['original_id'] ?? $product['id'];
                             return json_encode($resolver->getAttributes(['id' => $productId]));
                         }
@@ -103,6 +110,7 @@ class GraphQL {
                         'args' => [
                             'productId' => ['type' => Type::nonNull(Type::id())],
                             'quantity' => ['type' => Type::nonNull(Type::int())],
+                            'attributes' => ['type' => Type::string()],
                         ],
                         'resolve' => static fn ($rootValue, array $args) => $resolver->addToCart($args),
                     ],

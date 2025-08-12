@@ -12,7 +12,7 @@ $allowedOrigin = $_ENV['ALLOWED_ORIGIN'] ?? '*';
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: ' . $allowedOrigin);
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, apollo-require-preflight, X-Requested-With');
 
 // Handle preflight OPTIONS request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

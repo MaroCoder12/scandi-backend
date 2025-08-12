@@ -4,6 +4,7 @@ require_once __DIR__ . '/../models/Product.php';
 require_once __DIR__ . '/../models/ProductFactory.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../models/Cart.php';
+require_once __DIR__ . '/../services/OrderService.php';
 
 class GraphQLResolver {
     private $pdo;
@@ -15,9 +16,70 @@ class GraphQLResolver {
         $this->pdo = $database->getConnection();
         $this->productFactory = new ProductFactory($this->pdo);
     }
+    /**
+     * Normalize various DB representations of stock into a boolean.
+     * Accepts values like 'true'/'false', '1'/'0', 'yes'/'no', numeric counts.
+     */
+    private function normalizeInStock($value): bool {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if ($value === null) {
+            return false;
+        }
+        $val = strtolower(trim((string)$value));
+        // Numeric quantities: any positive number means in stock
+        if (is_numeric($val)) {
+            return intval($val) > 0;
+        }
+        // Common truthy/falsey strings
+        $truthy = ['true', 'yes', 'y', 'on', 'available', 'in stock'];
+        $falsey = ['false', 'no', 'n', 'off', 'unavailable', 'out of stock', ''];
+        if (in_array($val, $truthy, true)) {
+            return true;
+        }
+        if (in_array($val, $falsey, true)) {
+            return false;
+        }
+        // Fallback: not in stock
+        return false;
+    }
+    private function normalizeAttributesJson($attributes, $productId): string {
+        // If provided, normalize keys and ensure stable JSON
+        if ($attributes) {
+            $decoded = json_decode($attributes, true);
+            if (is_array($decoded)) {
+                ksort($decoded);
+                return json_encode($decoded, JSON_UNESCAPED_UNICODE);
+            }
+        }
+        // Derive defaults based on available attributes for the product
+        $available = $this->getAttributes(['id' => $productId]);
+        if (is_array($available) && !empty($available)) {
+            $defaults = [];
+            foreach ($available as $key => $values) {
+                if (is_array($values) && count($values) > 0) {
+                    $defaults[$key] = $values[0];
+                }
+            }
+            if (!empty($defaults)) {
+                ksort($defaults);
+                return json_encode($defaults, JSON_UNESCAPED_UNICODE);
+            }
+        }
+        // Fallback placeholder for products with no attributes
+        return json_encode(['Options' => 'Default'], JSON_UNESCAPED_UNICODE);
+    }
+
+
     // Method to retrieve a single product by ID using polymorphism
     public function getProduct($variables) {
-        return $this->productFactory->getProductByIdWithType($variables['id']);
+        $product = $this->productFactory->getProductByIdWithType($variables['id']);
+        if ($product) {
+            // Map DB field `in_stock` (stored as string) to GraphQL field `inStock` (boolean)
+            $product['inStock'] = $this->normalizeInStock($product['in_stock'] ?? null);
+        }
+        return $product;
     }
 
     // Method to retrieve all products using polymorphism
@@ -31,7 +93,9 @@ class GraphQLResolver {
                 'image_url' => $item['image_url'],
                 'category_id' => $item['category_id'],
                 'brand' => $item['brand'] ?? '',
-                'product_type' => $item['product_type'] ?? 'general'
+                'product_type' => $item['product_type'] ?? 'general',
+                // Normalize DB in_stock to GraphQL inStock boolean
+                'inStock' => $this->normalizeInStock($item['in_stock'] ?? null),
             ];
         }, $products);
     }
@@ -64,6 +128,7 @@ class GraphQLResolver {
     public function addToCart($variables) {
         $productId = $variables['productId'];
         $quantity = $variables['quantity'];
+        $incomingAttributes = $variables['attributes'] ?? null;
 
         // Check if product exists
         $stmt = $this->pdo->prepare("SELECT * FROM products WHERE id = :id");
@@ -75,9 +140,13 @@ class GraphQLResolver {
             throw new Exception("Product not found");
         }
 
-        // Check if product already exists in cart
-        $stmt = $this->pdo->prepare("SELECT * FROM cart WHERE product_id = :productId");
+        // Normalize/derive attributes (default for quick shop)
+        $normalizedAttributes = $this->normalizeAttributesJson($incomingAttributes, $productId);
+
+        // Check if a cart line with same product and same attributes exists
+        $stmt = $this->pdo->prepare("SELECT * FROM cart WHERE product_id = :productId AND COALESCE(attributes,'') = :attributes");
         $stmt->bindParam(':productId', $productId);
+        $stmt->bindParam(':attributes', $normalizedAttributes);
         $stmt->execute();
         $existingCartItem = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -91,9 +160,10 @@ class GraphQLResolver {
             $cartItemId = $existingCartItem['id'];
             $finalQuantity = $newQuantity;
         } else {
-            // Insert new cart item
-            $stmt = $this->pdo->prepare("INSERT INTO cart (product_id, quantity) VALUES (:productId, :quantity)");
+            // Insert new cart item with attributes
+            $stmt = $this->pdo->prepare("INSERT INTO cart (product_id, attributes, quantity) VALUES (:productId, :attributes, :quantity)");
             $stmt->bindParam(':productId', $productId);
+            $stmt->bindParam(':attributes', $normalizedAttributes);
             $stmt->bindParam(':quantity', $quantity);
             $stmt->execute();
             $cartItemId = $this->pdo->lastInsertId();
@@ -120,9 +190,9 @@ class GraphQLResolver {
             'product' => [
                 'id' => $product['id'],
                 'name' => $product['name'],
-                'price' => $productDetails['amount'] ?? 0,  // Use 'price' to match cart query
-                'image' => $productDetails['image_url'] ?? '',  // Use 'image' to match cart query
-                'attributes' => json_encode([]), // Default empty attributes for quick shop
+                'price' => $productDetails['amount'] ?? 0,
+                'image' => $productDetails['image_url'] ?? '',
+                'attributes' => $normalizedAttributes,
             ],
             'quantity' => $finalQuantity,
         ];
@@ -136,7 +206,8 @@ class GraphQLResolver {
                 products.*,
                 cart.quantity,
                 COALESCE(prices.amount, 0) as amount,
-                COALESCE(product_gallery.image_url, '') as image_url
+                COALESCE(product_gallery.image_url, '') as image_url,
+                cart.attributes as selected_attributes
             FROM cart
             JOIN products ON cart.product_id = products.id
             LEFT JOIN prices ON cart.product_id = prices.product_id
@@ -146,24 +217,11 @@ class GraphQLResolver {
         $cartItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return array_map(function ($item) {
-            // Get product attributes
-            $attributesStmt = $this->pdo->prepare("
-                SELECT attributes.name, attribute_items.value, attribute_items.display_value
-                FROM attributes
-                JOIN attribute_items ON attributes.id = attribute_items.attribute_id
-                WHERE attributes.product_id = :product_id
-            ");
-            $attributesStmt->bindParam(':product_id', $item['id']);
-            $attributesStmt->execute();
-            $attributesData = $attributesStmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Group attributes by name
-            $groupedAttributes = [];
-            foreach ($attributesData as $attr) {
-                if (!isset($groupedAttributes[$attr['name']])) {
-                    $groupedAttributes[$attr['name']] = [];
-                }
-                $groupedAttributes[$attr['name']][] = $attr['value'];
+            // Use stored selected attributes or derive defaults
+            $selected = $item['selected_attributes'] ?? '';
+            if (!$selected) {
+                // Derive defaults for stability
+                $selected = $this->normalizeAttributesJson(null, $item['id']);
             }
 
             return [
@@ -173,7 +231,7 @@ class GraphQLResolver {
                     'name' => $item['name'],
                     'price' => $item['amount'],
                     'image' => $item['image_url'],
-                    'attributes' => json_encode($groupedAttributes),
+                    'attributes' => $selected,
                 ],
                 'quantity' => $item['quantity']
             ];
@@ -285,13 +343,8 @@ class GraphQLResolver {
     }
 
     public function placeOrder() {
-        // Simple implementation - just clear the cart
-        $stmt = $this->pdo->prepare("DELETE FROM cart");
-        $stmt->execute();
-
-        return [
-            'success' => true,
-            'message' => 'Order placed successfully!'
-        ];
+        // Delegate to OrderService so dedicated endpoint and GraphQL share the same logic
+        $orderService = new OrderService();
+        return $orderService->placeOrder();
     }
 }
